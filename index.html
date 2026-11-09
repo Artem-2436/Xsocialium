@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xsocialium</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            --primary-color: #6d28d9;
+            --bg-dark: #0f172a;
+        }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-btn.active {
+            color: var(--primary-color);
+            transform: scale(1.1);
+        }
+
+        /* Message Bubbles */
+        .msg-row { display: flex; margin-bottom: 10px; width: 100%; }
+        .msg-mine { justify-content: flex-end; }
+        .msg-other { justify-content: flex-start; }
+        
+        .bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 18px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        .bubble.mine { background: var(--primary-color); color: white; border-bottom-right-radius: 4px; }
+        .bubble.other { background: rgba(255,255,255,0.1); color: white; border-bottom-left-radius: 4px; }
+        
+        .media-preview {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 12px;
+            object-fit: cover;
+            cursor: pointer;
+            margin-top: 5px;
+            display: block;
+        }
+        
+        .audio-player {
+            width: 100%;
+            height: 40px;
+            margin-top: 5px;
+        }
+
+        /* Input Area */
+        .input-area {
+            position: sticky;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            z-index: 10;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        /* Modal Overlay for Media Viewer */
+        #media-viewer-modal {
+            position: fixed; inset: 0; background: black; z-index: 100;
+            display: none; align-items: center; justify-content: center;
+        }
+        #media-viewer-close {
+            position: absolute; top: 20px; right: 20px; font-size: 30px; color: white; cursor: pointer;
+        }
+        #media-viewer-content img, #media-viewer-content video {
+            max-width: 90vw; max-height: 90vh; object-fit: contain;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- AUTH SCREEN -->
+    <div id="auth-screen" class="flex-1 flex items-center justify-center p-4 fade-in">
+        <div class="glass-panel w-full max-w-md p-8 space-y-6">
+            <h1 class="text-3xl font-bold text-center bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">Xsocialium</h1>
+            
+            <!-- Login Form -->
+            <form id="login-form" class="space-y-4">
+                <input type="email" placeholder="Email" required class="w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <input type="password" placeholder="Пароль" required class="w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <!-- Hidden field for 2FA code if enabled -->
+                <input type="text" id="login-2fa-code" placeholder="Код из Auth App (если включен)" class="hidden w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <button type="submit" class="w-full py-3 bg-purple-600 hover:bg-purple-700 transition rounded-lg font-semibold">Войти</button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="hidden space-y-4">
+                <input type="text" id="reg-name" placeholder="Имя Фамилия" required class="w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <input type="tel" id="reg-phone" placeholder="+7 900 000 00 00" required class="w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <input type="email" id="reg-email" placeholder="Email" required class="w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <input type="password" id="reg-pass" placeholder="Пароль" required class="w-full px-4 py-3 rounded-lg input-glass text-white placeholder-gray-400">
+                <button type="submit" class="w-full py-3 bg-green-600 hover:bg-green-700 transition rounded-lg font-semibold">Зарегистрироваться</button>
+            </form>
+
+            <p class="text-center text-sm text-gray-400 cursor-pointer hover:text-white" onclick="toggleAuthMode()">Нет аккаунта? Регистрация / Есть? Вход</p>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div id="app-container" class="hidden flex-1 flex flex-col h-full relative">
+        
+        <!-- Header -->
+        <header class="glass-panel m-2 p-4 flex justify-between items-center z-10">
+            <h2 id="page-title" class="font-bold text-xl truncate max-w-[150px]">Чаты</h2>
+            <div class="flex gap-4">
+                <i class="fas fa-arrow-left cursor-pointer hover:text-purple-400 hidden" id="back-btn" onclick="goBackFromChat()"></i>
+                <i class="fas fa-cog cursor-pointer hover:text-purple-400" onclick="switchTab('settings')"></i>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <main id="content-area" class="flex-1 overflow-hidden relative">
+            
+            <!-- CHAT LIST VIEW -->
+            <div id="view-chats-list" class="absolute inset-0 p-2 overflow-y-auto pb-20">
+                <div id="chat-list" class="space-y-2"></div>
+                <button onclick="openNewChatModal()" class="fixed bottom-24 right-6 w-14 h-14 bg-purple-600 rounded-full shadow-lg flex items-center justify-center text-2xl hover:scale-110 transition z-20">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+
+            <!-- ACTIVE CHAT ROOM VIEW -->
+            <div id="view-chat-room" class="absolute inset-0 hidden flex flex-col bg-black/20">
+                <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-2 pb-4">
+                    <!-- Messages injected here -->
+                </div>
+                
+                <!-- Input Bar -->
+                <div class="input-area flex items-end gap-2">
+                    <label for="file-input" class="cursor-pointer p-2 text-gray-400 hover:text-white">
+                        <i class="fas fa-paperclip text-xl"></i>
+                    </label>
+                    <input type="file" id="file-input" accept="image/*,video/*,audio/*" class="hidden" onchange="handleFileSelect(this)">
+                    
+                    <textarea id="message-input" rows="1" placeholder="Сообщение..." 
+                        class="flex-1 bg-white/10 border-none rounded-2xl px-4 py-2 resize-none focus:ring-1 focus:ring-purple-500 text-white placeholder-gray-400 max-h-32"></textarea>
+                    
+                    <button onclick="sendMessage()" class="p-2 bg-purple-600 rounded-full text-white hover:bg-purple-700 disabled:opacity-50">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Calls View -->
+            <div id="view-calls" class="absolute inset-0 p-4 hidden overflow-y-auto pb-20">
+                <div class="mb-4">
+                    <button onclick="startCallFlow()" class="w-full py-3 bg-blue-600 rounded-lg font-bold mb-4"><i class="fas fa-phone-alt mr-2"></i> Позвонить контакту</button>
+                </div>
+                <h3 class="text-lg font-bold mb-2 text-gray-300">История звонков</h3>
+                <div id="call-history-list" class="space-y-2"></div>
+            </div>
+
+            <!-- Profile View -->
+            <div id="view-profile" class="absolute inset-0 p-4 hidden overflow-y-auto pb-20">
+                <div class="flex flex-col items-center mb-6">
+                    <img id="profile-avatar" src="" alt="Avatar" class="w-24 h-24 rounded-full object-cover border-4 border-purple-500 mb-2">
+                    <h2 id="profile-name" class="text-2xl font-bold"></h2>
+                    <p id="profile-phone" class="text-gray-400"></p>
+                </div>
+                
+                <div class="glass-panel p-4 space-y-4">
+                    <div class="border-b border-gray-700 pb-4">
+                        <label class="block text-xs text-gray-400 mb-1">Изменить имя</label>
+                        <input type="text" id="edit-name" class="w-full bg-transparent border-b border-gray-600 focus:border-purple-500 outline-none py-1">
+                    </div>
+                    <div class="border-b border-gray-700 pb-4">
+                        <label class="block text-xs text-gray-400 mb-1">Телефон</label>
+                        <input type="tel" id="edit-phone" class="w-full bg-transparent border-b border-gray-600 focus:border-purple-500 outline-none py-1">
+                    </div>
+                    <div class="pt-2">
+                        <h4 class="font-bold mb-2">Соцсети</h4>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="url" id="soc-tg" placeholder="Telegram Link" class="input-glass p-2 rounded text-sm">
+                            <input type="url" id="soc-vk" placeholder="VK Link" class="input-glass p-2 rounded text-sm">
+                        </div>
+                    </div>
+                    <button onclick="saveProfile()" class="w-full py-2 bg-purple-600 rounded mt-4">Сохранить изменения</button>
+                </div>
+
+                <div class="mt-6 glass-panel p-4">
+                    <h4 class="font-bold mb-2">Безопасность</h4>
+                    <button onclick="setup2FA()" class="w-full py-2 bg-red-600 rounded mb-2">Настроить 2FA</button>
+                    <button onclick="changePassword()" class="w-full py-2 bg-gray-700 rounded">Сменить пароль</button>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="view-settings" class="absolute inset-0 p-4 hidden overflow-y-auto pb-20">
+                 <div class="glass-panel p-4 space-y-4">
+                     <div class="flex justify-between items-center">
+                         <span>Уведомления</span>
+                         <input type="checkbox" id="setting-notif" checked class="transform scale-125 accent-purple-600">
+                     </div>
+                     <div class="flex justify-between items-center">
+                         <span>Звук сообщений</span>
+                         <input type="checkbox" id="setting-sound" checked class="transform scale-125 accent-purple-600">
+                     </div>
+                     <hr class="border-gray-700">
+                     <button onclick="logout()" class="w-full py-2 bg-red-900 text-red-200 rounded hover:bg-red-800">Выйти из аккаунта</button>
+                 </div>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="glass-panel mx-2 mb-2 p-2 flex justify-around items-center z-10 fixed bottom-0 left-0 right-0">
+            <button class="nav-btn active flex flex-col items-center p-2" onclick="switchTab('chats')">
+                <i class="fas fa-comments text-xl"></i>
+                <span class="text-xs mt-1">Чаты</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center p-2 text-gray-400" onclick="switchTab('calls')">
+                <i class="fas fa-phone-volume text-xl"></i>
+                <span class="text-xs mt-1">Звонки</span>
+            </button>
+            <button class="nav-btn flex flex-col items-center p-2 text-gray-400" onclick="switchTab('profile')">
+                <i class="fas fa-user-circle text-xl"></i>
+                <span class="text-xs mt-1">Профиль</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-70 hidden z-50 flex items-center justify-center p-4">
+        <div id="modal-content" class="glass-panel w-full max-w-md p-6 relative">
+            <button onclick="closeModal()" class="absolute top-2 right-2 text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            <div id="dynamic-modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Full Screen Media Viewer -->
+    <div id="media-viewer-modal" onclick="closeMediaViewer()">
+        <div id="media-viewer-close"><i class="fas fa-times"></i></div>
+        <div id="media-viewer-content" onclick="event.stopPropagation()"></div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
